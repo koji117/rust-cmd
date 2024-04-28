@@ -19,10 +19,10 @@ struct Args {
     #[arg(short('w'), long)]
     words: bool,
     /// Whether to print the byte count.
-    #[arg(short('b'), long)]
+    #[arg(short('c'), long)]
     bytes: bool,
     /// Whether to print the char count.
-    #[arg(short('c'), long, conflicts_with("bytes"))]
+    #[arg(short('m'), long, conflicts_with("bytes"))]
     chars: bool,
 }
 
