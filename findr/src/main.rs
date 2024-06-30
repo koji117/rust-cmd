@@ -2,7 +2,7 @@ use anyhow::Result;
 use clap::builder::PossibleValue;
 use clap::{ArgAction, Parser, ValueEnum};
 use regex::Regex;
-use walkdir::WalkDir;
+use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug, Eq, PartialEq, Clone)]
 enum EntryType {
@@ -56,7 +56,6 @@ struct Args {
 
 fn main() {
     let execution_result = run(Args::parse());
-
     match execution_result {
         Err(e) => {
             eprintln!("{e}");
@@ -72,25 +71,40 @@ fn run(args: Args) -> Result<()> {
     for path in &args.paths {
         // println!("{:?}", args);
         for entry in WalkDir::new(path) {
-            match entry {
-                Err(e) => eprintln!("Error: {e}"),
-                Ok(entry) => {
-                    if args.entry_types.is_empty() {
-                        println!("{}", entry.path().display());
-                    }
-                    if entry.path().is_dir() && args.entry_types.contains(&EntryType::Dir) {
-                        let path_str = entry.path().to_str().unwrap().to_string();
-                        println!("{}", path_str);
-                    }
-                    if entry.path().is_file() && args.entry_types.contains(&EntryType::File) {
-                        let path_str = entry.path().to_str().unwrap().to_string();
-                        println!("{}", path_str);
-                    }
-                    if entry.path().is_symlink() && args.entry_types.contains(&EntryType::Link) {
-                        let path_str = entry.path().to_str().unwrap().to_string();
-                        println!("{}", path_str);
-                    }
-                }
+            let type_filter = |entry: &DirEntry| {
+                args.entry_types.is_empty()
+                    || args.entry_types.iter().any(|entry_type| match entry_type {
+                        EntryType::Link => entry.file_type().is_symlink(),
+                        EntryType::Dir => entry.file_type().is_dir(),
+                        EntryType::File => entry.file_type().is_file(),
+                    })
+            };
+
+            let name_filter = |entry: &DirEntry| {
+                args.names.is_empty()
+                    || args
+                        .names
+                        .iter()
+                        .any(|re| re.is_match(&entry.file_name().to_string_lossy()))
+            };
+
+            for path in &args.paths {
+                // Turn WalkDir into an iterator and use Iterator::filter_map to remove and print bad results to STDERR
+                // while allowing Ok results to pass through.
+                let entries = WalkDir::new(path)
+                    .into_iter()
+                    .filter_map(|e| match e {
+                        Err(e) => {
+                            eprintln!("{e}");
+                            None
+                        }
+                        Ok(entry) => Some(entry),
+                    })
+                    .filter(type_filter)
+                    .filter(name_filter)
+                    .map(|entry| entry.path().display().to_string())
+                    .collect::<Vec<_>>();
+                println!("{}", entries.join("\n"));
             }
         }
     }
